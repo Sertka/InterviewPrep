@@ -1,0 +1,76 @@
+/* ДЗ04 Задача про кинотеатр */
+
+/* Создаем БД и таблицы*/
+CREATE SCHEMA `cinema_db` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+
+CREATE TABLE `cinema_db`.`film` (
+  `film_id` INT NOT NULL AUTO_INCREMENT,
+  `film_duration` INT NOT NULL,
+  `film_name` VARCHAR(70) NOT NULL,
+  PRIMARY KEY (`film_id`));
+
+CREATE TABLE `cinema_db`.`seance` (
+  `seance_id` INT NOT NULL AUTO_INCREMENT,
+  `film_id` INT NULL,
+  `seance_time` DATETIME NULL,
+  `ticket_price` INT NULL,
+  PRIMARY KEY (`seance_id`),
+  INDEX `Film_id_idx` (`film_id` ASC) VISIBLE,
+  CONSTRAINT `Film_id`
+    FOREIGN KEY (`seance_film`)
+    REFERENCES `cinema_db`.`film` (`film_id`)
+    ON DELETE NO ACTION
+    ON UPDATE NO ACTION);
+
+CREATE TABLE `ticket` (
+  `ticket_id` int NOT NULL AUTO_INCREMENT,
+  `seance_id` int DEFAULT NULL,
+  `ticket_num` varchar(45) DEFAULT NULL,
+  PRIMARY KEY (`ticket_id`),
+  KEY `Seance_ticket_idx` (`seance_id`),
+  CONSTRAINT `ticket_seance` FOREIGN KEY (`seance_id`) REFERENCES `seance` (`seance_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+
+/* ошибки в расписании (фильмы накладываются друг на друга), отсортированные по возрастанию времени */
+SELECT
+f1.film_name,
+s1.seance_time,
+f1.film_duration,
+f2.film_name as 'conflict_film',
+s2.seance_time as 'conflict',
+f2.film_duration as 'conflict_film_duration'
+FROM seance as s1, film as f1
+INNER JOIN (film as f2, seance as s2)
+ON (f2.film_id = s2.film_id)
+WHERE TIMESTAMPDIFF(MINUTE, s1.seance_time, s2.seance_time) > 0
+	AND TIMESTAMPDIFF(MINUTE, s1.seance_time, s2.seance_time) < (f1.film_duration)
+	AND s1.seance_id <> s2.seance_id
+    AND s1.film_id = f1.film_id
+ORDER BY TIMESTAMPDIFF(MINUTE, s1.seance_time, s2.seance_time)
+
+
+/* перерывы 30 минут и более между фильмами — выводить по уменьшению длительности перерыва */
+SELECT
+f1.film_name,
+s1.seance_time,
+f1.film_duration,
+s2.seance_time as 'f2_start_time',
+(TIMESTAMPDIFF(MINUTE, s1.seance_time, s2.seance_time) - f1.film_duration) as 'gap_lenght'
+FROM seance as s1, film as f1
+INNER JOIN (seance as s2)
+WHERE TIMESTAMPDIFF(MINUTE, s1.seance_time, s2.seance_time) > 0
+	AND (TIMESTAMPDIFF(MINUTE, s1.seance_time, s2.seance_time) - f1.film_duration) > 30
+	AND s1.seance_id <> s2.seance_id
+    AND s1.film_id = f1.film_id
+ORDER BY TIMESTAMPDIFF(MINUTE, s1.seance_time, s2.seance_time) - f1.film_duration DESC
+
+/* список фильмов, для каждого — с указанием общего числа посетителей за все время, среднего числа зрителей за сеанс и общей суммы сборов по каждому фильму */
+SELECT
+f.film_name,
+SUM(t.ticket_id)
+FROM film as f
+INNER JOIN (seance as s, ticket as t)
+ON (f.film_id = s.film_id AND s.seance_id = t.seance_id)
+GROUP BY f.film_name
